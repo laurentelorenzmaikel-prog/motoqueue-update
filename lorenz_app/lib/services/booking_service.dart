@@ -38,7 +38,7 @@ class BookingService {
           .collection('appointments')
           .where('date', isEqualTo: _formatDateOnly(date))
           .where('timeSlot', isEqualTo: timeSlot)
-          .where('status', whereIn: ['pending', 'confirmed'])
+          .where('status', whereIn: ['pending', 'confirmed', 'in_process'])
           .get(const GetOptions(source: Source.server));
 
       return querySnapshot.docs.length;
@@ -60,7 +60,7 @@ class BookingService {
           .where('date', isEqualTo: _formatDateOnly(date))
           .where('timeSlot', isEqualTo: timeSlot)
           .where('userId', isEqualTo: userId)
-          .where('status', whereIn: ['pending', 'confirmed'])
+          .where('status', whereIn: ['pending', 'confirmed', 'in_process'])
           .get(const GetOptions(source: Source.server));
 
       return querySnapshot.docs.isNotEmpty;

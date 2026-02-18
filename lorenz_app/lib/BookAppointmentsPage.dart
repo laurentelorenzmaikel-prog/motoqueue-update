@@ -67,17 +67,36 @@ class _BookingAppointmentsPageState extends State<BookingAppointmentsPage> {
         date: date,
       );
 
+      // Filter out past slots if the selected date is today
+      List<String> filteredSlots = [];
+      Map<String, int> filteredAvailability = {};
+      final now = DateTime.now();
+
+      if (_isToday(date)) {
+        for (final slot in slots) {
+          final slotDateTime = _parseSlotToDateTime(slot, date);
+          if (slotDateTime.isAfter(now)) {
+            filteredSlots.add(slot);
+            filteredAvailability[slot] = availability[slot] ?? 0;
+          }
+        }
+      } else {
+        filteredSlots = slots;
+        filteredAvailability = availability;
+      }
+
       if (mounted) {
         setState(() {
-          availableTimeSlots = slots;
-          slotAvailability = availability;
+          availableTimeSlots = filteredSlots;
+          slotAvailability = filteredAvailability;
           isLoadingSlots = false;
 
-          if (slots.isEmpty) {
+          if (filteredSlots.isEmpty) {
             availabilityMessage =
                 'No slots available for this date. Please choose another day.';
           } else {
-            availabilityMessage = '${slots.length} time slots available';
+            final totalSpots = filteredAvailability.values.fold(0, (sum, spots) => sum + spots);
+            availabilityMessage = '$totalSpots time slots available';
           }
         });
       }
@@ -90,6 +109,29 @@ class _BookingAppointmentsPageState extends State<BookingAppointmentsPage> {
         });
       }
     }
+  }
+
+  /// Check if the given date is today
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month && date.day == now.day;
+  }
+
+  /// Parse time slot string (e.g., "8:00 AM") to DateTime for the given date
+  DateTime _parseSlotToDateTime(String slot, DateTime date) {
+    final timeParts = slot.split(' '); // "8:00 AM" -> ["8:00", "AM"]
+    final time = timeParts[0].split(':'); // "8:00" -> ["8", "00"]
+    var hour = int.parse(time[0]);
+    final minute = int.parse(time[1]);
+
+    if (timeParts.length == 2 && timeParts[1].toUpperCase() == 'PM' && hour < 12) {
+      hour += 12;
+    }
+    if (timeParts.length == 2 && timeParts[1].toUpperCase() == 'AM' && hour == 12) {
+      hour = 0; // Midnight case
+    }
+
+    return DateTime(date.year, date.month, date.day, hour, minute);
   }
 
   Future<void> _submitBooking() async {

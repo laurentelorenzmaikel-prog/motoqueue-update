@@ -29,6 +29,10 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
   final Map<String, Map<String, String>> _userCache = {};
   final GlobalKey<State> _usersPageKey = GlobalKey<State>();
   final GlobalKey<State> _predictionsPageKey = GlobalKey<State>();
+  final GlobalKey<State> _feedbackPageKey = GlobalKey<State>();
+  final GlobalKey<State> _sparePartsPageKey = GlobalKey<State>();
+  final GlobalKey<State> _analyticsPageKey = GlobalKey<State>();
+  final GlobalKey<State> _securityPageKey = GlobalKey<State>();
 
   // Pagination state for completed/rejected appointments
   int _completedRejectedCurrentPage = 0;
@@ -537,7 +541,7 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
               IconButton(
                 icon: Icon(Icons.refresh,
                     color: const Color(0xFF6B7280), size: isMobile ? 20 : 24),
-                onPressed: _loadDashboardData,
+                onPressed: _refreshCurrentPage,
                 tooltip: 'Refresh',
               ),
               if (!isMobile) ...[
@@ -571,6 +575,27 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
         ],
       ),
     );
+  }
+
+  void _refreshCurrentPage() {
+    switch (_selectedIndex) {
+      case 0:
+      case 4:
+        _loadDashboardData();
+        break;
+      case 1:
+        (_usersPageKey.currentState as dynamic)?.refresh();
+        break;
+      case 2:
+        (_predictionsPageKey.currentState as dynamic)?.refresh();
+        break;
+      case 3:
+        (_feedbackPageKey.currentState as dynamic)?.refresh();
+        break;
+      case 5:
+        (_sparePartsPageKey.currentState as dynamic)?.refresh();
+        break;
+    }
   }
 
   String _getPageTitle() {
@@ -620,11 +645,11 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
       case 2:
         return PredictionsPage(key: _predictionsPageKey);
       case 3:
-        return const AdminFeedbackPage();
+        return AdminFeedbackPage(key: _feedbackPageKey);
       case 4:
         return _buildAppointmentsOverview();
       case 5:
-        return const SparePartsPage();
+        return SparePartsPage(key: _sparePartsPageKey);
       default:
         return _buildDashboardOverview();
     }

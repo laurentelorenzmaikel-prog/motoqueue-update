@@ -27,6 +27,10 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
     'Custom Work & Accessories Installation',
   ];
 
+  void refresh() {
+    _loadFeedback();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -704,23 +708,6 @@ class _AdminFeedbackPageState extends State<AdminFeedbackPage> {
                 //     color: Color(0xFF1F2937),
                 //   ),
                 // ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    _loadFeedback();
-                  },
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Refresh'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF225FFF),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

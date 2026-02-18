@@ -16,14 +16,19 @@ class _UsersManagementPageState extends ConsumerState<UsersManagementPage> {
   String _searchQuery = '';
   UserRole? _filterRole;
 
+  void refresh() {
+    ref.refresh(allUsersProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final allUsersAsync = ref.watch(allUsersProvider);
 
-    return Container(
-      color: const Color(0xFFF5F7FA),
-      child: Column(
-        children: [
+    return Scaffold(
+      body: Container(
+        color: const Color(0xFFF5F7FA),
+        child: Column(
+          children: [
           // Search and Filter Bar
           Container(
             padding: const EdgeInsets.all(16),
@@ -78,11 +83,6 @@ class _UsersManagementPageState extends ConsumerState<UsersManagementPage> {
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () => ref.refresh(allUsersProvider),
-                      tooltip: 'Refresh',
                     ),
                   ],
                 ),
@@ -140,30 +140,31 @@ class _UsersManagementPageState extends ConsumerState<UsersManagementPage> {
                   ),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 64, color: Colors.red.shade400),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error loading users: ${error.toString()}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.red.shade700),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref.refresh(allUsersProvider),
-                      child: const Text('Retry'),
-                    ),
-                  ],
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 64, color: Colors.red.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error loading users: ${error.toString()}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => ref.refresh(allUsersProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

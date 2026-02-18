@@ -38,6 +38,10 @@ class _SparePartsPageState extends State<SparePartsPage> {
     'Tires & Wheels',
   ];
 
+  void refresh() {
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();

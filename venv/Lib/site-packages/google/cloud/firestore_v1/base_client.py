@@ -25,6 +25,7 @@ In the hierarchy of API concepts
 """
 from __future__ import annotations
 
+import datetime
 import os
 from typing import (
     Any,
@@ -36,6 +37,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    Type,
 )
 
 import google.api_core.client_options
@@ -56,10 +58,12 @@ from google.cloud.firestore_v1.base_document import (
     DocumentSnapshot,
 )
 from google.cloud.firestore_v1.base_query import BaseQuery
-from google.cloud.firestore_v1.base_transaction import BaseTransaction
+from google.cloud.firestore_v1.base_transaction import MAX_ATTEMPTS, BaseTransaction
 from google.cloud.firestore_v1.bulk_writer import BulkWriter, BulkWriterOptions
 from google.cloud.firestore_v1.field_path import render_field_path
 from google.cloud.firestore_v1.services.firestore import client as firestore_client
+from google.cloud.firestore_v1.pipeline_source import PipelineSource
+from google.cloud.firestore_v1.base_pipeline import _BasePipeline
 
 DEFAULT_DATABASE = "(default)"
 """str: The default database used in a :class:`~google.cloud.firestore_v1.client.Client`."""
@@ -437,6 +441,7 @@ class BaseClient(ClientWithProject):
         transaction: BaseTransaction | None = None,
         retry: retries.Retry | retries.AsyncRetry | object | None = None,
         timeout: float | None = None,
+        read_time: datetime.datetime | None = None,
     ) -> Tuple[dict, dict, dict]:
         """Shared setup for async/sync :meth:`get_all`."""
         document_paths, reference_map = _reference_info(references)
@@ -447,6 +452,8 @@ class BaseClient(ClientWithProject):
             "mask": mask,
             "transaction": _helpers.get_transaction_id(transaction),
         }
+        if read_time is not None:
+            request["read_time"] = read_time
         kwargs = _helpers.make_retry_timeout_kwargs(retry, timeout)
 
         return request, reference_map, kwargs
@@ -458,6 +465,8 @@ class BaseClient(ClientWithProject):
         transaction=None,
         retry: retries.Retry | retries.AsyncRetry | object | None = None,
         timeout: float | None = None,
+        *,
+        read_time: datetime.datetime | None = None,
     ) -> Union[
         AsyncGenerator[DocumentSnapshot, Any], Generator[DocumentSnapshot, Any, Any]
     ]:
@@ -467,9 +476,14 @@ class BaseClient(ClientWithProject):
         self,
         retry: retries.Retry | retries.AsyncRetry | object | None = None,
         timeout: float | None = None,
+        read_time: datetime.datetime | None = None,
     ) -> Tuple[dict, dict]:
         """Shared setup for async/sync :meth:`collections`."""
-        request = {"parent": "{}/documents".format(self._database_string)}
+        request: dict[str, Any] = {
+            "parent": "{}/documents".format(self._database_string),
+        }
+        if read_time is not None:
+            request["read_time"] = read_time
         kwargs = _helpers.make_retry_timeout_kwargs(retry, timeout)
 
         return request, kwargs
@@ -478,13 +492,31 @@ class BaseClient(ClientWithProject):
         self,
         retry: retries.Retry | retries.AsyncRetry | object | None = None,
         timeout: float | None = None,
+        *,
+        read_time: datetime.datetime | None = None,
     ):
         raise NotImplementedError
 
     def batch(self) -> BaseWriteBatch:
         raise NotImplementedError
 
-    def transaction(self, **kwargs) -> BaseTransaction:
+    def transaction(
+        self, max_attempts: int = MAX_ATTEMPTS, read_only: bool = False
+    ) -> BaseTransaction:
+        raise NotImplementedError
+
+    def pipeline(self) -> PipelineSource:
+        """
+        Start a pipeline with this client.
+
+        Returns:
+            :class:`~google.cloud.firestore_v1.pipeline_source.PipelineSource`:
+            A pipeline that uses this client`
+        """
+        raise NotImplementedError
+
+    @property
+    def _pipeline_cls(self) -> Type["_BasePipeline"]:
         raise NotImplementedError
 
 

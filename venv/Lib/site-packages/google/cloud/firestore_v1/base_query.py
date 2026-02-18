@@ -24,6 +24,7 @@ import abc
 import copy
 import math
 import warnings
+
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -58,6 +59,7 @@ from google.cloud.firestore_v1.types import (
     query,
 )
 from google.cloud.firestore_v1.vector import Vector
+from google.cloud.firestore_v1 import pipeline_expressions
 
 if TYPE_CHECKING:  # pragma: NO COVER
     from google.cloud.firestore_v1.async_stream_generator import AsyncStreamGenerator
@@ -65,6 +67,9 @@ if TYPE_CHECKING:  # pragma: NO COVER
     from google.cloud.firestore_v1.query_profile import ExplainOptions
     from google.cloud.firestore_v1.query_results import QueryResultsList
     from google.cloud.firestore_v1.stream_generator import StreamGenerator
+    from google.cloud.firestore_v1.pipeline_source import PipelineSource
+
+    import datetime
 
 
 _BAD_DIR_STRING: str
@@ -179,7 +184,7 @@ def _validate_opation(op_string, value):
 class FieldFilter(BaseFilter):
     """Class representation of a Field Filter."""
 
-    def __init__(self, field_path, op_string, value=None):
+    def __init__(self, field_path: str, op_string: str, value: Any | None = None):
         self.field_path = field_path
         self.value = value
         self.op_string = _validate_opation(op_string, value)
@@ -205,8 +210,8 @@ class BaseCompositeFilter(BaseFilter):
 
     def __init__(
         self,
-        operator=StructuredQuery.CompositeFilter.Operator.OPERATOR_UNSPECIFIED,
-        filters=None,
+        operator: int = StructuredQuery.CompositeFilter.Operator.OPERATOR_UNSPECIFIED,
+        filters: list[BaseFilter] | None = None,
     ):
         self.operator = operator
         if filters is None:
@@ -238,7 +243,7 @@ class BaseCompositeFilter(BaseFilter):
 class Or(BaseCompositeFilter):
     """Class representation of an OR Filter."""
 
-    def __init__(self, filters):
+    def __init__(self, filters: list[BaseFilter]):
         super().__init__(
             operator=StructuredQuery.CompositeFilter.Operator.OR, filters=filters
         )
@@ -247,7 +252,7 @@ class Or(BaseCompositeFilter):
 class And(BaseCompositeFilter):
     """Class representation of an AND Filter."""
 
-    def __init__(self, filters):
+    def __init__(self, filters: list[BaseFilter]):
         super().__init__(
             operator=StructuredQuery.CompositeFilter.Operator.AND, filters=filters
         )
@@ -926,7 +931,7 @@ class BaseQuery(object):
 
         if isinstance(document_fields, document.DocumentSnapshot):
             snapshot = document_fields
-            document_fields = snapshot.to_dict()
+            document_fields = copy.deepcopy(snapshot._data)
             document_fields["__name__"] = snapshot.reference
 
         if isinstance(document_fields, dict):
@@ -1032,6 +1037,7 @@ class BaseQuery(object):
         timeout: Optional[float] = None,
         *,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> (
         QueryResultsList[DocumentSnapshot]
         | Coroutine[Any, Any, QueryResultsList[DocumentSnapshot]]
@@ -1044,6 +1050,7 @@ class BaseQuery(object):
         retry: retries.Retry | retries.AsyncRetry | object | None = None,
         timeout: Optional[float] = None,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> Tuple[dict, str, dict]:
         """Shared setup for async / sync :meth:`stream`"""
         if self._limit_to_last:
@@ -1060,6 +1067,8 @@ class BaseQuery(object):
         }
         if explain_options is not None:
             request["explain_options"] = explain_options._to_dict()
+        if read_time is not None:
+            request["read_time"] = read_time
         kwargs = _helpers.make_retry_timeout_kwargs(retry, timeout)
 
         return request, expected_prefix, kwargs
@@ -1071,6 +1080,7 @@ class BaseQuery(object):
         timeout: Optional[float] = None,
         *,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> (
         StreamGenerator[document.DocumentSnapshot]
         | AsyncStreamGenerator[DocumentSnapshot]
@@ -1119,6 +1129,73 @@ class BaseQuery(object):
             )
 
         return copied
+
+    def _build_pipeline(self, source: "PipelineSource"):
+        """
+        Convert this query into a Pipeline
+
+        Queries containing a `cursor` or `limit_to_last` are not currently supported
+
+        Args:
+            source: the PipelineSource to build the pipeline off of
+        Raises:
+            - NotImplementedError: raised if the query contains a `cursor` or `limit_to_last`
+        Returns:
+            a Pipeline representing the query
+        """
+        if self._all_descendants:
+            ppl = source.collection_group(self._parent.id)
+        else:
+            ppl = source.collection(self._parent._path)
+
+        # Filters
+        for filter_ in self._field_filters:
+            ppl = ppl.where(
+                pipeline_expressions.BooleanExpression._from_query_filter_pb(
+                    filter_, self._client
+                )
+            )
+
+        # Projections
+        if self._projection and self._projection.fields:
+            ppl = ppl.select(*[field.field_path for field in self._projection.fields])
+
+        # Orders
+        orders = self._normalize_orders()
+        if orders:
+            exists = []
+            orderings = []
+            for order in orders:
+                field = pipeline_expressions.Field.of(order.field.field_path)
+                exists.append(field.exists())
+                direction = (
+                    "ascending"
+                    if order.direction == StructuredQuery.Direction.ASCENDING
+                    else "descending"
+                )
+                orderings.append(pipeline_expressions.Ordering(field, direction))
+
+            # Add exists filters to match Query's implicit orderby semantics.
+            if len(exists) == 1:
+                ppl = ppl.where(exists[0])
+            else:
+                ppl = ppl.where(pipeline_expressions.And(*exists))
+
+            # Add sort orderings
+            ppl = ppl.sort(*orderings)
+
+        # Cursors, Limit and Offset
+        if self._start_at or self._end_at or self._limit_to_last:
+            raise NotImplementedError(
+                "Query to Pipeline conversion: cursors and limit_to_last is not supported yet."
+            )
+        else:  # Limit & Offset without cursors
+            if self._offset:
+                ppl = ppl.offset(self._offset)
+            if self._limit:
+                ppl = ppl.limit(self._limit)
+
+        return ppl
 
     def _comparator(self, doc1, doc2) -> int:
         _orders = self._orders
@@ -1427,6 +1504,7 @@ class BaseCollectionGroup(BaseQuery):
         partition_count,
         retry: retries.Retry | object | None = None,
         timeout: float | None = None,
+        read_time: datetime.datetime | None = None,
     ) -> Tuple[dict, dict]:
         self._validate_partition_query()
         parent_path, expected_prefix = self._parent._parent_info()
@@ -1443,6 +1521,8 @@ class BaseCollectionGroup(BaseQuery):
             "structured_query": query._to_protobuf(),
             "partition_count": partition_count,
         }
+        if read_time is not None:
+            request["read_time"] = read_time
         kwargs = _helpers.make_retry_timeout_kwargs(retry, timeout)
 
         return request, kwargs
@@ -1452,6 +1532,8 @@ class BaseCollectionGroup(BaseQuery):
         partition_count,
         retry: Optional[retries.Retry] = None,
         timeout: Optional[float] = None,
+        *,
+        read_time: Optional[datetime.datetime] = None,
     ):
         raise NotImplementedError
 

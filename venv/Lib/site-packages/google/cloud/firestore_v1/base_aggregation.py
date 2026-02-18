@@ -21,8 +21,10 @@ a more common way to create an aggregation query than direct usage of the constr
 from __future__ import annotations
 
 import abc
+import itertools
+
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Coroutine, List, Optional, Tuple, Union, Iterable
 
 from google.api_core import gapic_v1
 from google.api_core import retry as retries
@@ -32,6 +34,10 @@ from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1.types import (
     StructuredAggregationQuery,
 )
+from google.cloud.firestore_v1.pipeline_expressions import AggregateFunction
+from google.cloud.firestore_v1.pipeline_expressions import Count
+from google.cloud.firestore_v1.pipeline_expressions import AliasedExpression
+from google.cloud.firestore_v1.pipeline_expressions import Field
 
 # Types needed only for Type Hints
 if TYPE_CHECKING:  # pragma: NO COVER
@@ -42,6 +48,9 @@ if TYPE_CHECKING:  # pragma: NO COVER
     from google.cloud.firestore_v1.stream_generator import (
         StreamGenerator,
     )
+    from google.cloud.firestore_v1.pipeline_source import PipelineSource
+
+    import datetime
 
 
 class AggregationResult(object):
@@ -63,6 +72,9 @@ class AggregationResult(object):
     def __repr__(self):
         return f"<Aggregation alias={self.alias}, value={self.value}, readtime={self.read_time}>"
 
+    def _to_dict(self):
+        return {self.alias: self.value}
+
 
 class BaseAggregation(ABC):
     def __init__(self, alias: str | None = None):
@@ -72,6 +84,27 @@ class BaseAggregation(ABC):
     def _to_protobuf(self):
         """Convert this instance to the protobuf representation"""
 
+    @abc.abstractmethod
+    def _to_pipeline_expr(
+        self, autoindexer: Iterable[int]
+    ) -> AliasedExpression[AggregateFunction]:
+        """
+        Convert this instance to a pipeline expression for use with pipeline.aggregate()
+
+        Args:
+          autoindexer: If an alias isn't supplied, one should be created with the format "field_n"
+            The autoindexer is an iterable that provides the `n` value to use for each expression
+        """
+
+    def _pipeline_alias(self, autoindexer):
+        """
+        Helper to build the alias for the pipeline expression
+        """
+        if self.alias is not None:
+            return self.alias
+        else:
+            return f"field_{next(autoindexer)}"
+
 
 class CountAggregation(BaseAggregation):
     def __init__(self, alias: str | None = None):
@@ -80,43 +113,57 @@ class CountAggregation(BaseAggregation):
     def _to_protobuf(self):
         """Convert this instance to the protobuf representation"""
         aggregation_pb = StructuredAggregationQuery.Aggregation()
-        aggregation_pb.alias = self.alias
+        if self.alias:
+            aggregation_pb.alias = self.alias
         aggregation_pb.count = StructuredAggregationQuery.Aggregation.Count()
         return aggregation_pb
+
+    def _to_pipeline_expr(self, autoindexer: Iterable[int]):
+        return Count().as_(self._pipeline_alias(autoindexer))
 
 
 class SumAggregation(BaseAggregation):
     def __init__(self, field_ref: str | FieldPath, alias: str | None = None):
-        if isinstance(field_ref, FieldPath):
-            # convert field path to string
-            field_ref = field_ref.to_api_repr()
-        self.field_ref = field_ref
+        # convert field path to string if needed
+        field_str = (
+            field_ref.to_api_repr() if isinstance(field_ref, FieldPath) else field_ref
+        )
+        self.field_ref: str = field_str
         super(SumAggregation, self).__init__(alias=alias)
 
     def _to_protobuf(self):
         """Convert this instance to the protobuf representation"""
         aggregation_pb = StructuredAggregationQuery.Aggregation()
-        aggregation_pb.alias = self.alias
+        if self.alias:
+            aggregation_pb.alias = self.alias
         aggregation_pb.sum = StructuredAggregationQuery.Aggregation.Sum()
         aggregation_pb.sum.field.field_path = self.field_ref
         return aggregation_pb
 
+    def _to_pipeline_expr(self, autoindexer: Iterable[int]):
+        return Field.of(self.field_ref).sum().as_(self._pipeline_alias(autoindexer))
+
 
 class AvgAggregation(BaseAggregation):
     def __init__(self, field_ref: str | FieldPath, alias: str | None = None):
-        if isinstance(field_ref, FieldPath):
-            # convert field path to string
-            field_ref = field_ref.to_api_repr()
-        self.field_ref = field_ref
+        # convert field path to string if needed
+        field_str = (
+            field_ref.to_api_repr() if isinstance(field_ref, FieldPath) else field_ref
+        )
+        self.field_ref: str = field_str
         super(AvgAggregation, self).__init__(alias=alias)
 
     def _to_protobuf(self):
         """Convert this instance to the protobuf representation"""
         aggregation_pb = StructuredAggregationQuery.Aggregation()
-        aggregation_pb.alias = self.alias
+        if self.alias:
+            aggregation_pb.alias = self.alias
         aggregation_pb.avg = StructuredAggregationQuery.Aggregation.Avg()
         aggregation_pb.avg.field.field_path = self.field_ref
         return aggregation_pb
+
+    def _to_pipeline_expr(self, autoindexer: Iterable[int]):
+        return Field.of(self.field_ref).average().as_(self._pipeline_alias(autoindexer))
 
 
 def _query_response_to_result(
@@ -205,6 +252,7 @@ class BaseAggregationQuery(ABC):
         retry: Union[retries.Retry, retries.AsyncRetry, None, object] = None,
         timeout: float | None = None,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> Tuple[dict, dict]:
         parent_path, expected_prefix = self._collection_ref._parent_info()
         request = {
@@ -214,6 +262,8 @@ class BaseAggregationQuery(ABC):
         }
         if explain_options:
             request["explain_options"] = explain_options._to_dict()
+        if read_time is not None:
+            request["read_time"] = read_time
         kwargs = _helpers.make_retry_timeout_kwargs(retry, timeout)
 
         return request, kwargs
@@ -228,6 +278,7 @@ class BaseAggregationQuery(ABC):
         timeout: float | None = None,
         *,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> (
         QueryResultsList[AggregationResult]
         | Coroutine[Any, Any, List[List[AggregationResult]]]
@@ -253,6 +304,10 @@ class BaseAggregationQuery(ABC):
                 (Optional[:class:`~google.cloud.firestore_v1.query_profile.ExplainOptions`]):
                 Options to enable query profiling for this query. When set,
                 explain_metrics will be available on the returned generator.
+            read_time (Optional[datetime.datetime]): If set, reads documents as they were at the given
+                time. This must be a timestamp within the past one hour, or if Point-in-Time Recovery
+                is enabled, can additionally be a whole minute timestamp within the past 7 days. If no
+                timezone is specified in the :class:`datetime.datetime` object, it is assumed to be UTC.
 
         Returns:
             (QueryResultsList[List[AggregationResult]] | Coroutine[Any, Any, List[List[AggregationResult]]]):
@@ -270,6 +325,7 @@ class BaseAggregationQuery(ABC):
         timeout: Optional[float] = None,
         *,
         explain_options: Optional[ExplainOptions] = None,
+        read_time: Optional[datetime.datetime] = None,
     ) -> (
         StreamGenerator[List[AggregationResult]]
         | AsyncStreamGenerator[List[AggregationResult]]
@@ -291,8 +347,30 @@ class BaseAggregationQuery(ABC):
                 (Optional[:class:`~google.cloud.firestore_v1.query_profile.ExplainOptions`]):
                 Options to enable query profiling for this query. When set,
                 explain_metrics will be available on the returned generator.
+            read_time (Optional[datetime.datetime]): If set, reads documents as they were at the given
+                time. This must be a timestamp within the past one hour, or if Point-in-Time Recovery
+                is enabled, can additionally be a whole minute timestamp within the past 7 days. If no
+                timezone is specified in the :class:`datetime.datetime` object, it is assumed to be UTC.
 
         Returns:
             StreamGenerator[List[AggregationResult]] | AsyncStreamGenerator[List[AggregationResult]]:
             A generator of the query results.
         """
+
+    def _build_pipeline(self, source: "PipelineSource"):
+        """
+        Convert this query into a Pipeline
+
+        Queries containing a `cursor` or `limit_to_last` are not currently supported
+
+        Args:
+            source: the PipelineSource to build the pipeline off of
+        Raises:
+            - NotImplementedError: raised if the query contains a `cursor` or `limit_to_last`
+        Returns:
+            a Pipeline representing the query
+        """
+        # use autoindexer to keep track of which field number to use for un-aliased fields
+        autoindexer = itertools.count(start=1)
+        exprs = [a._to_pipeline_expr(autoindexer) for a in self._aggregations]
+        return self._nested_query._build_pipeline(source).aggregate(*exprs)

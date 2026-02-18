@@ -370,7 +370,6 @@ def train_model(df, active_parts):
     
     print(f"✓ Training set: {len(X_train)} samples")
     print(f"✓ Test set: {len(X_test)} samples")
-    
     # Train model
     print("\n⏳ Training Random Forest model...")
     model = RandomForestRegressor(
