@@ -15,7 +15,7 @@ class SignUpPage extends ConsumerStatefulWidget {
 class _SignUpPageState extends ConsumerState<SignUpPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final mobileController = TextEditingController();
+  final fullNameController = TextEditingController();
   DateTime _birthdate = DateTime.now();
   bool _obscureText = true;
   String? _passwordError;
@@ -100,11 +100,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                               hint: "example@example.com",
                               icon: Icons.email_outlined),
                           const SizedBox(height: 20),
-                          _buildModernTextField(
-                              "Mobile Number", mobileController,
-                              hint: "+63 912 345 6789",
-                              isPhone: true,
-                              icon: Icons.phone_outlined),
+                          _buildModernTextField("Full Name", fullNameController,
+                              hint: "John Doe",
+                              icon: Icons.person_outlined),
                           const SizedBox(height: 20),
                           _buildModernDateField(),
                           const SizedBox(height: 20),
@@ -541,9 +539,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   void _signUp() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
-    final mobile = mobileController.text.trim();
+    final fullName = fullNameController.text.trim();
 
-    if (email.isEmpty || password.isEmpty || mobile.isEmpty) {
+    if (email.isEmpty || password.isEmpty || fullName.isEmpty) {
       _showMessage("Please fill in all fields.");
       return;
     }
@@ -575,7 +573,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
       await ref.read(secureAuthServiceProvider).signUpWithEmail(
             email: email,
             password: password,
-            displayName: mobile, // Use mobile as display name temporarily
+            displayName: fullName,
           );
 
       // Close loading dialog

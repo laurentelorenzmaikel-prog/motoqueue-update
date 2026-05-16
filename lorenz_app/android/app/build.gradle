@@ -19,7 +19,7 @@ if (hasKeystoreProperties) {
 
 android {
     namespace = "com.example.lorenz_app"
-    compileSdk = 35  // Updated from flutter.compileSdkVersion to fix plugin compatibility
+    compileSdk = 36  // Updated from flutter.compileSdkVersion to fix plugin compatibility
     // ndkVersion = "27.0.12077973"  // Updated for Firebase plugin compatibility
 
     compileOptions {
@@ -58,7 +58,7 @@ android {
         applicationId = "com.example.lorenz_app"
 
         minSdkVersion flutter.minSdkVersion
-        targetSdk = 35  // Updated to match compileSdk
+        targetSdk = 36  // Updated to match compileSdk
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

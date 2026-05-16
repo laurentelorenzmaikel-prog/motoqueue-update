@@ -763,15 +763,15 @@ class _HomePageState extends State<HomePage> {
     };
 
     final mechanicData = {
-      'General Maintenance &\nRepairs': ['John Cruz', 'ASE Certified', 5],
-      'Engine & Electrical\nWork': ['Mark Reyes', 'Electrical Tech Expert', 8],
+      'General Maintenance &\nRepairs': ['Pampag Toto', 'ASE Certified', 5],
+      'Engine & Electrical\nWork': ['Balong Guhao', 'Electrical Tech Expert', 8],
       'Performance &\nCustomization': [
-        'Lucas Tan',
+        'Baldo',
         'Performance Specialist',
         6
       ],
       'Custom Work &\nAccessories Installation': [
-        'Ella Lim',
+        ' Franco Balitog Jr.',
         'Custom Bike Builder',
         4
       ],

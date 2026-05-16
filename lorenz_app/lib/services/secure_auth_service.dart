@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 enum UserRole { admin, user, mechanic }
 
@@ -117,7 +118,10 @@ class SecureAuthService {
   GoogleSignIn _getGoogleSignIn() {
     if (_googleSignIn == null) {
       try {
-        _googleSignIn = GoogleSignIn(signInOption: SignInOption.standard);
+        _googleSignIn = GoogleSignIn(
+          signInOption: SignInOption.standard,
+          clientId: '579238365079-sb2julgnhjt43kt85bbcjn0mlqtnpfnf.apps.googleusercontent.com',
+        );
       } catch (e) {
         throw Exception(
             'Google Sign-In not configured. Please add client ID for web platform.');
@@ -259,18 +263,27 @@ class SecureAuthService {
     String? userAgent,
   }) async {
     try {
-      final googleUser = await _getGoogleSignIn().signIn();
-      if (googleUser == null) {
-        throw Exception('Google Sign-In aborted');
+      UserCredential authResult;
+
+      if (kIsWeb) {
+        // Use Firebase Auth popup for Web - avoids JavaScript Origin configuration issues
+        final googleProvider = GoogleAuthProvider();
+        authResult = await _auth.signInWithPopup(googleProvider);
+      } else {
+        // Standard flow for Mobile
+        final googleUser = await _getGoogleSignIn().signIn();
+        if (googleUser == null) {
+          throw Exception('Google Sign-In aborted');
+        }
+
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        authResult = await _auth.signInWithCredential(credential);
       }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final authResult = await _auth.signInWithCredential(credential);
 
       if (authResult.user == null) {
         throw Exception('Google authentication failed');

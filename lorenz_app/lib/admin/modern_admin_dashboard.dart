@@ -37,6 +37,7 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
   // Pagination state for completed/rejected appointments
   int _completedRejectedCurrentPage = 0;
   final int _completedRejectedItemsPerPage = 10;
+  bool _isCompletedDateAscending = false;
 
   // Analytics data for dashboard charts
   Map<String, int> serviceTypeData = {};
@@ -1567,18 +1568,48 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
           }
         }
 
-        // Sort completed/rejected appointments by updatedAt (most recent first)
+        // Sort completed/rejected appointments
         completedRejectedAppointments.sort((a, b) {
           final aData = a.data() as Map<String, dynamic>;
           final bData = b.data() as Map<String, dynamic>;
-          final aUpdated = aData['updatedAt'] as Timestamp?;
-          final bUpdated = bData['updatedAt'] as Timestamp?;
 
-          if (aUpdated == null && bUpdated == null) return 0;
-          if (aUpdated == null) return 1;
-          if (bUpdated == null) return -1;
+          DateTime? aDate;
+          DateTime? bDate;
 
-          return bUpdated.compareTo(aUpdated); // Descending order
+          if (aData['dateTime'] != null) {
+            aDate = aData['dateTime'] is Timestamp
+                ? (aData['dateTime'] as Timestamp).toDate()
+                : DateTime.tryParse(aData['dateTime']?.toString() ?? '');
+          }
+          if (bData['dateTime'] != null) {
+            bDate = bData['dateTime'] is Timestamp
+                ? (bData['dateTime'] as Timestamp).toDate()
+                : DateTime.tryParse(bData['dateTime']?.toString() ?? '');
+          }
+
+          if (aDate == null && bDate == null) {
+            final aUpdated = aData['updatedAt'] as Timestamp?;
+            final bUpdated = bData['updatedAt'] as Timestamp?;
+            if (aUpdated == null && bUpdated == null) return 0;
+            if (aUpdated == null) return 1;
+            if (bUpdated == null) return -1;
+            return _isCompletedDateAscending
+                ? aUpdated.compareTo(bUpdated)
+                : bUpdated.compareTo(aUpdated);
+          }
+
+          if (aDate == null) return 1;
+          if (bDate == null) return -1;
+
+          int result = aDate.compareTo(bDate);
+
+          if (result == 0) {
+            final aTime = aData['timeSlot']?.toString() ?? '';
+            final bTime = bData['timeSlot']?.toString() ?? '';
+            result = aTime.compareTo(bTime);
+          }
+
+          return _isCompletedDateAscending ? result : -result;
         });
 
         return SingleChildScrollView(
@@ -2256,26 +2287,34 @@ class _ModernAdminDashboardState extends State<ModernAdminDashboard> {
                 headingRowColor:
                     WidgetStateProperty.all(const Color(0xFFF3F4F6)),
                 columnSpacing: 24,
-                columns: const [
+                sortColumnIndex: 0,
+                sortAscending: _isCompletedDateAscending,
+                columns: [
                   DataColumn(
-                      label: Text('Date',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                    label: const Text('Date',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    onSort: (columnIndex, ascending) {
+                      setState(() {
+                        _isCompletedDateAscending = ascending;
+                      });
+                    },
+                  ),
+                  const DataColumn(
                       label: Text('Time',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                  const DataColumn(
                       label: Text('Customer',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                  const DataColumn(
                       label: Text('Service',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                  const DataColumn(
                       label: Text('Spare Parts',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                  const DataColumn(
                       label: Text('Status',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
+                  const DataColumn(
                       label: Text('Actions',
                           style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
